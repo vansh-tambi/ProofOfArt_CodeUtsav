@@ -1,287 +1,190 @@
-'use client';
+'use client'
 
-import { useState } from 'react';
-import { useAccount, useSigner } from 'wagmi';
-import { ConnectButton } from '@rainbow-me/rainbowkit';
-import { registerProofOnChain } from '@/lib/blockchain';
-import Link from 'next/link';
-import { QRCodeSVG } from 'qrcode.react';
+import { useState } from 'react'
+import { motion } from 'framer-motion'
+import { useAccount } from 'wagmi'
+import LoadingSpinner from '../components/LoadingSpinner'
+import CertificateDisplay from '../components/CertificateDisplay'
+import Image from 'next/image' // For displaying the generated image
 
-export default function CreatePage() {
-  const { address, isConnected } = useAccount();
-  const { data: signer } = useSigner();
-  const [prompt, setPrompt] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [generatedImage, setGeneratedImage] = useState<string | null>(null);
-  const [proof, setProof] = useState<any>(null);
-  const [certificate, setCertificate] = useState<any>(null);
-
-  const handleGenerate = async () => {
-    if (!prompt.trim() || !isConnected || !address) {
-      alert('Please connect your wallet and enter a prompt');
-      return;
-    }
-
-    setLoading(true);
-    setGeneratedImage(null);
-    setProof(null);
-    setCertificate(null);
-
-    try {
-      // Call API to generate image and create proof
-      const response = await fetch('/api/generate', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          prompt,
-          userAddress: address,
-          type: 'image',
-        }),
-      });
-
-      const data = await response.json();
-
-      if (!data.success) {
-        throw new Error(data.error || 'Generation failed');
-      }
-
-      setGeneratedImage(`data:image/png;base64,${data.proof.outputBuffer}`);
-      setProof(data.proof);
-
-      // Register on blockchain
-      if (signer) {
-        try {
-          const txHash = await registerProofOnChain(signer, {
-            promptHash: data.proof.promptHash,
-            outputHash: data.proof.outputHash,
-            combinedHash: data.proof.combinedHash,
-            ipfsLink: data.proof.outputCid,
-          });
-
-          // Create certificate
-          const cert = {
-            creator: address,
-            prompt,
-            promptHash: data.proof.promptHash,
-            outputHash: data.proof.outputHash,
-            combinedHash: data.proof.combinedHash,
-            timestamp: new Date(data.proof.timestamp).toISOString(),
-            ipfsLink: data.proof.outputCid,
-            metadataCid: data.proof.metadataCid,
-            txHash,
-            verificationUrl: `${window.location.origin}/verify?hash=${data.proof.combinedHash}`,
-          };
-
-          setCertificate(cert);
-        } catch (error: any) {
-          console.error('Blockchain registration error:', error);
-          alert(
-            'Image generated but blockchain registration failed: ' +
-              error.message
-          );
-        }
-      }
-    } catch (error: any) {
-      console.error('Generation error:', error);
-      alert('Failed to generate: ' + error.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
-      <nav className="border-b border-gray-200 bg-white/80 backdrop-blur-sm sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <Link
-              href="/"
-              className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent"
-            >
-              Proof of Art
-            </Link>
-            <ConnectButton />
-          </div>
-        </div>
-      </nav>
-
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <div className="max-w-4xl mx-auto">
-          <h1 className="text-4xl font-bold text-center mb-8">
-            Create Verifiable AI Art
-          </h1>
-
-          {!isConnected ? (
-            <div className="bg-white rounded-xl shadow-lg p-8 text-center">
-              <p className="text-lg text-gray-600 mb-4">
-                Connect your wallet to get started
-              </p>
-              <ConnectButton />
-            </div>
-          ) : (
-            <>
-              <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Enter your prompt
-                </label>
-                <textarea
-                  value={prompt}
-                  onChange={(e) => setPrompt(e.target.value)}
-                  placeholder="A futuristic cityscape at sunset with flying cars..."
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  rows={4}
-                />
-                <button
-                  onClick={handleGenerate}
-                  disabled={loading || !prompt.trim()}
-                  className="mt-4 w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
-                >
-                  {loading ? 'Generating...' : 'Generate & Create Proof'}
-                </button>
-              </div>
-
-              {generatedImage && (
-                <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
-                  <h2 className="text-2xl font-bold mb-4">Generated Artwork</h2>
-                  <img
-                    src={generatedImage}
-                    alt="Generated artwork"
-                    className="w-full rounded-lg mb-4"
-                  />
-                  {proof && (
-                    <div className="bg-gray-50 p-4 rounded-lg">
-                      <p className="text-sm text-gray-600">
-                        <strong>Combined Hash:</strong>{' '}
-                        <code className="text-xs">{proof.combinedHash}</code>
-                      </p>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {certificate && (
-                <div className="bg-gradient-to-br from-blue-50 to-purple-50 rounded-xl shadow-lg p-8 border-2 border-blue-200">
-                  <h2 className="text-3xl font-bold text-center mb-6">
-                    🎨 Proof of Art Certificate
-                  </h2>
-
-                  <div className="grid md:grid-cols-2 gap-6 mb-6">
-                    <div>
-                      <h3 className="font-semibold text-gray-700 mb-2">
-                        Creator
-                      </h3>
-                      <p className="text-sm font-mono bg-white p-2 rounded">
-                        {certificate.creator}
-                      </p>
-                    </div>
-
-                    <div>
-                      <h3 className="font-semibold text-gray-700 mb-2">
-                        Timestamp
-                      </h3>
-                      <p className="text-sm bg-white p-2 rounded">
-                        {new Date(certificate.timestamp).toLocaleString()}
-                      </p>
-                    </div>
-
-                    <div className="md:col-span-2">
-                      <h3 className="font-semibold text-gray-700 mb-2">
-                        Prompt
-                      </h3>
-                      <p className="text-sm bg-white p-2 rounded">
-                        {certificate.prompt}
-                      </p>
-                    </div>
-
-                    <div>
-                      <h3 className="font-semibold text-gray-700 mb-2">
-                        Combined Hash
-                      </h3>
-                      <p className="text-xs font-mono bg-white p-2 rounded break-all">
-                        {certificate.combinedHash}
-                      </p>
-                    </div>
-
-                    <div>
-                      <h3 className="font-semibold text-gray-700 mb-2">
-                        Transaction Hash
-                      </h3>
-                      <p className="text-xs font-mono bg-white p-2 rounded break-all">
-                        {certificate.txHash}
-                      </p>
-                    </div>
-
-                    <div>
-                      <h3 className="font-semibold text-gray-700 mb-2">
-                        IPFS Link
-                      </h3>
-                      <a
-                        href={`https://ipfs.io/ipfs/${certificate.ipfsLink}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-xs text-blue-600 hover:underline break-all"
-                      >
-                        ipfs://{certificate.ipfsLink}
-                      </a>
-                    </div>
-
-                    <div>
-                      <h3 className="font-semibold text-gray-700 mb-2">
-                        Verification URL
-                      </h3>
-                      <a
-                        href={certificate.verificationUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-xs text-blue-600 hover:underline break-all"
-                      >
-                        {certificate.verificationUrl}
-                      </a>
-                    </div>
-                  </div>
-
-                  <div className="flex justify-center">
-                    <div className="bg-white p-4 rounded-lg">
-                      <QRCodeSVG value={certificate.verificationUrl} size={200} />
-                    </div>
-                  </div>
-
-                  <div className="mt-6 text-center">
-                    <button
-                      onClick={() => {
-                        const printWindow = window.open('', '_blank');
-                        if (printWindow) {
-                          printWindow.document.write(`
-                            <html>
-                              <head><title>Proof of Art Certificate</title></head>
-                              <body>
-                                <h1>Proof of Art Certificate</h1>
-                                <p><strong>Creator:</strong> ${certificate.creator}</p>
-                                <p><strong>Timestamp:</strong> ${certificate.timestamp}</p>
-                                <p><strong>Prompt:</strong> ${certificate.prompt}</p>
-                                <p><strong>Hash:</strong> ${certificate.combinedHash}</p>
-                                <p><strong>Verify at:</strong> ${certificate.verificationUrl}</p>
-                              </body>
-                            </html>
-                          `);
-                          printWindow.document.close();
-                          printWindow.print();
-                        }
-                      }}
-                      className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700"
-                    >
-                      Print Certificate
-                    </button>
-                  </div>
-                </div>
-              )}
-            </>
-          )}
-        </div>
-      </main>
-    </div>
-  );
+// Define the shape of our proof data
+type ProofData = {
+  creatorAddress: string
+  timestamp: number
+  prompt: string
+  imageHash: string
+  proofHash: string
+  txHash: string
+  ipfsUrl: string
 }
 
+export default function CreatePage() {
+  const { isConnected, address } = useAccount()
+
+  // --- Page State ---
+  const [prompt, setPrompt] = useState('')
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  
+  // --- Results State ---
+  const [generatedImage, setGeneratedImage] = useState<string | null>(null)
+  const [proof, setProof] = useState<ProofData | null>(null)
+
+  // --- Mock API Call Function ---
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!prompt || !address) return
+
+    setIsLoading(true)
+    setError(null)
+    setGeneratedImage(null)
+    setProof(null)
+
+    try {
+      // --- STAGE 1: Call API to generate image (Mocked) ---
+      // In a real app:
+      // const response = await fetch('/api/generate', {
+      //   method: 'POST',
+      //   body: JSON.stringify({ prompt, userAddress: address }),
+      // });
+      // const data = await response.json();
+      
+      // Mocking the API call:
+      await new Promise(resolve => setTimeout(resolve, 2500))
+      
+      // Mocked image result (use a real placeholder)
+      const mockImageUrl = `https://picsum.photos/seed/${encodeURIComponent(prompt)}/512/512`
+      setGeneratedImage(mockImageUrl)
+
+      
+      // --- STAGE 2: Register on-chain (Mocked) ---
+      // In a real app, this is where you'd call the smart contract
+      // const tx = await registerProofOnChain(...)
+      
+      // Mocking the blockchain transaction:
+      await new Promise(resolve => setTimeout(resolve, 1500))
+
+      // Mocked proof data:
+      const mockProof: ProofData = {
+        creatorAddress: address,
+        timestamp: Date.now(),
+        prompt: prompt,
+        imageHash: '0x' + 'a'.repeat(64),
+        proofHash: '0x' + 'b'.repeat(64),
+        txHash: '0x' + 'c'.repeat(64),
+        ipfsUrl: 'ipfs://' + 'd'.repeat(46),
+      }
+      setProof(mockProof)
+
+    } catch (err) {
+      console.error(err)
+      setError('Failed to generate proof. Please try again.')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  // --- Render Wallet Connect Message ---
+  if (!isConnected) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh]">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="glass-card text-center p-8 rounded-2xl"
+        >
+          <h2 className="text-3xl font-bold text-white mb-4">
+            Connect Your Wallet
+          </h2>
+          <p className="text-xl text-slate-300">
+            Please connect your wallet to create a Proof-of-Art.
+          </p>
+        </motion.div>
+      </div>
+    )
+  }
+
+  // --- Render Main Page ---
+  return (
+    <div className="flex flex-col items-center w-full min-h-[70vh] pb-20">
+      {/* --- The Form --- */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="glass-card w-full max-w-2xl p-6 md:p-8 rounded-2xl"
+      >
+        <form onSubmit={handleSubmit}>
+          <label
+            htmlFor="prompt"
+            className="block text-2xl font-semibold text-white mb-4"
+          >
+            Enter Your Prompt
+          </label>
+          <textarea
+            id="prompt"
+            rows={4}
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+            placeholder="e.g., 'A cyberpunk city skyline, neon purple and blue, 8k resolution'"
+            className="w-full p-4 rounded-lg bg-black/20 text-white
+                       border border-white/20 focus:outline-none 
+                       focus:ring-2 focus:ring-blue-400"
+            disabled={isLoading}
+          />
+          <motion.button
+            type="submit"
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            disabled={isLoading || !prompt}
+            className="mt-6 w-full rounded-xl px-8 py-4
+                       text-lg font-semibold text-white
+                       bg-white/10 hover:bg-white/20
+                       disabled:opacity-50 disabled:cursor-not-allowed
+                       transition-all duration-300"
+          >
+            {isLoading ? 'Generating...' : 'Generate & Create Proof'}
+          </motion.button>
+        </form>
+      </motion.div>
+
+      {/* --- The Results --- */}
+      {isLoading && <LoadingSpinner size="lg" />}
+
+      {error && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="mt-6 text-red-400 bg-red-900/50 p-4 rounded-lg"
+        >
+          {error}
+        </motion.div>
+      )}
+
+      {/* Generated Image Preview */}
+      {generatedImage && !proof && ( // Show image *before* certificate
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mt-8"
+        >
+          <h3 className="text-2xl text-white font-semibold mb-4">
+            Image Generated!
+          </h3>
+          <Image
+            src={generatedImage}
+            alt="AI generated art"
+            width={512}
+            height={512}
+            className="rounded-xl shadow-lg"
+          />
+          <p className="text-slate-300 mt-4">
+            Registering proof on the blockchain...
+          </p>
+        </motion.div>
+      )}
+
+      {/* Final Certificate */}
+      {proof && <CertificateDisplay proofData={proof} />}
+    </div>
+  )
+}

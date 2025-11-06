@@ -1,214 +1,339 @@
-'use client';
+'use client'
 
-import { useState, useEffect, Suspense } from 'react';
-import { useSearchParams } from 'next/navigation';
-import { verifyProofOnChain, getProvider } from '@/lib/blockchain';
-import Link from 'next/link';
-import { formatDistanceToNow } from 'date-fns';
+import { useState, useEffect } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { useSearchParams } from 'next/navigation'
+import LoadingSpinner from '../components/LoadingSpinner'
+import { format } from 'date-fns'
+import Image from 'next/image' // <-- Import Image component
 
-function VerifyContent() {
-  const searchParams = useSearchParams();
-  const hashFromUrl = searchParams.get('hash');
-  
-  const [hash, setHash] = useState(hashFromUrl || '');
-  const [loading, setLoading] = useState(false);
-  const [verificationResult, setVerificationResult] = useState<any>(null);
-  const [error, setError] = useState<string | null>(null);
+// Define the shape of the data we expect from verification
+type VerifiedProof = {
+  creatorAddress: string
+  timestamp: number
+  prompt: string
+  ipfsUrl: string
+  txHash: string
+}
 
-  useEffect(() => {
-    if (hashFromUrl) {
-      handleVerify(hashFromUrl);
-    }
-  }, [hashFromUrl]);
-
-  const handleVerify = async (hashToVerify?: string) => {
-    const hashValue = hashToVerify || hash;
-    
-    if (!hashValue.trim()) {
-      setError('Please enter a hash to verify');
-      return;
-    }
-
-    setLoading(true);
-    setError(null);
-    setVerificationResult(null);
-
-    try {
-      const provider = getProvider();
-      const result = await verifyProofOnChain(provider, hashValue);
-
-      if (result.exists) {
-        setVerificationResult(result);
-      } else {
-        setError('Proof not found on blockchain. This artwork may not be registered.');
+// Mock function to "check" the blockchain
+const mockFetchProof = (hash: string): Promise<VerifiedProof> => {
+  return new Promise((resolve, reject) => {
+    setTimeout(() => {
+      // Simulate a "Not Found" error for any hash except our mock one
+      if (hash !== '0x' + 'b'.repeat(64)) {
+        reject(new Error('Proof not found. The hash is invalid or not registered.'))
       }
-    } catch (error: any) {
-      console.error('Verification error:', error);
-      setError(error.message || 'Failed to verify proof');
-    } finally {
-      setLoading(false);
-    }
-  };
 
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
-      <nav className="border-b border-gray-200 bg-white/80 backdrop-blur-sm sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <Link
-              href="/"
-              className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent"
-            >
-              Proof of Art
-            </Link>
-            <Link
-              href="/create"
-              className="text-blue-600 hover:text-blue-700 font-medium"
-            >
-              Create Art
-            </Link>
-          </div>
-        </div>
-      </nav>
-
-      <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <h1 className="text-4xl font-bold text-center mb-8">
-          Verify Artwork Authenticity
-        </h1>
-
-        <div className="bg-white rounded-xl shadow-lg p-8 mb-6">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Enter Combined Hash or Proof Hash
-          </label>
-          <div className="flex gap-2">
-            <input
-              type="text"
-              value={hash}
-              onChange={(e) => setHash(e.target.value)}
-              placeholder="Enter hash to verify..."
-              className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              onKeyPress={(e) => e.key === 'Enter' && handleVerify()}
-            />
-            <button
-              onClick={() => handleVerify()}
-              disabled={loading || !hash.trim()}
-              className="bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
-            >
-              {loading ? 'Verifying...' : 'Verify'}
-            </button>
-          </div>
-          <p className="text-sm text-gray-500 mt-2">
-            Paste the combined hash from a Proof of Art certificate to verify
-            authenticity
-          </p>
-        </div>
-
-        {error && (
-          <div className="bg-red-50 border border-red-200 rounded-xl p-6 mb-6">
-            <div className="flex items-center gap-3">
-              <span className="text-2xl">❌</span>
-              <div>
-                <h3 className="font-semibold text-red-800">Verification Failed</h3>
-                <p className="text-red-600">{error}</p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {verificationResult && (
-          <div className="bg-green-50 border-2 border-green-200 rounded-xl p-8">
-            <div className="flex items-center gap-3 mb-6">
-              <span className="text-4xl">✅</span>
-              <div>
-                <h2 className="text-3xl font-bold text-green-800">
-                  Verification Successful
-                </h2>
-                <p className="text-green-600">
-                  This artwork is verified and registered on the blockchain
-                </p>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-lg p-6 space-y-4">
-              <div>
-                <h3 className="font-semibold text-gray-700 mb-2">Creator Address</h3>
-                <p className="font-mono text-sm bg-gray-50 p-2 rounded break-all">
-                  {verificationResult.creator}
-                </p>
-              </div>
-
-              <div>
-                <h3 className="font-semibold text-gray-700 mb-2">
-                  Registration Timestamp
-                </h3>
-                <p className="text-sm bg-gray-50 p-2 rounded">
-                  {new Date(verificationResult.timestamp * 1000).toLocaleString()}
-                  <span className="text-gray-500 ml-2">
-                    ({formatDistanceToNow(
-                      new Date(verificationResult.timestamp * 1000)
-                    )}{' '}
-                    ago)
-                  </span>
-                </p>
-              </div>
-
-              <div>
-                <h3 className="font-semibold text-gray-700 mb-2">IPFS Link</h3>
-                <a
-                  href={`https://ipfs.io/ipfs/${verificationResult.ipfsLink}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-blue-600 hover:underline text-sm break-all"
-                >
-                  ipfs://{verificationResult.ipfsLink}
-                </a>
-              </div>
-
-              <div className="bg-blue-50 p-4 rounded-lg">
-                <p className="text-sm text-blue-800">
-                  <strong>Note:</strong> This proof is permanently stored on the
-                  blockchain and cannot be altered or forged. The artwork file is
-                  stored on IPFS for decentralized access.
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        <div className="bg-white rounded-xl shadow-lg p-6 mt-6">
-          <h2 className="text-xl font-bold mb-4">How Verification Works</h2>
-          <ol className="list-decimal list-inside space-y-2 text-gray-600">
-            <li>
-              Enter the combined hash from a Proof of Art certificate
-            </li>
-            <li>
-              The system queries the blockchain smart contract to verify the hash
-              exists
-            </li>
-            <li>
-              If found, the proof details (creator, timestamp, IPFS link) are
-              displayed
-            </li>
-            <li>
-              The blockchain&apos;s immutability ensures the proof cannot be tampered
-              with
-            </li>
-          </ol>
-        </div>
-      </main>
-    </div>
-  );
+      // Simulate a successful lookup
+      resolve({
+        creatorAddress: '0x1234...5678',
+        timestamp: new Date('2025-10-30T14:30:00Z').getTime(),
+        prompt: "A cyberpunk city skyline, neon purple and blue, 8k resolution",
+        ipfsUrl: 'ipfs://' + 'd'.repeat(46),
+        txHash: '0x' + 'c'.repeat(64),
+      })
+    }, 2000)
+  })
 }
 
 export default function VerifyPage() {
+  const searchParams = useSearchParams()
+  const hashFromUrl = searchParams.get('hash')
+
+  // --- Page State ---
+  const [hashInput, setHashInput] = useState(hashFromUrl || '')
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [result, setResult] = useState<VerifiedProof | null>(null)
+
+  // --- New Image Upload States ---
+  const [uploadedImageFile, setUploadedImageFile] = useState<File | null>(null)
+  const [uploadedImagePreview, setUploadedImagePreview] = useState<string | null>(null)
+
+  // --- Main Verification Logic (takes hash) ---
+  const handleVerify = async (hashToVerify: string) => {
+    if (!hashToVerify) return
+
+    setIsLoading(true)
+    setError(null)
+    setResult(null)
+
+    try {
+      const proof = await mockFetchProof(hashToVerify)
+      setResult(proof)
+    } catch (err: any) {
+      setError(err.message || 'An unknown error occurred.')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  // --- Auto-verify if hash is in URL ---
+  useEffect(() => {
+    if (hashFromUrl) {
+      setHashInput(hashFromUrl)
+      handleVerify(hashFromUrl)
+    }
+  }, [hashFromUrl])
+
+  // --- Image Handlers ---
+  const clearImage = () => {
+    setUploadedImageFile(null)
+    setUploadedImagePreview(null)
+    setError(null)
+  }
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0]
+      if (file.type.startsWith('image/')) {
+        setUploadedImageFile(file)
+        setUploadedImagePreview(URL.createObjectURL(file))
+        setHashInput('') // Clear hash input
+        setError(null)
+      } else {
+        setError('Please upload a valid image file.')
+        clearImage()
+      }
+    }
+  }
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const file = e.dataTransfer.files[0]
+    if (file && file.type.startsWith('image/')) {
+      setUploadedImageFile(file)
+      setUploadedImagePreview(URL.createObjectURL(file))
+      setHashInput('') // Clear hash input
+      setError(null)
+    } else {
+      setError('Please drop a valid image file.')
+    }
+  }
+
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    e.stopPropagation()
+  }
+
+  // --- Form Submission (Handles BOTH inputs) ---
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    
+    let hashToVerify = '';
+
+    if (uploadedImageFile) {
+      // In a real app, you'd hash the image client-side first
+      // const imageHash = await hashImage(uploadedImageFile);
+      // hashToVerify = imageHash;
+
+      // --- MOCK LOGIC ---
+      // For this demo, we'll pretend any uploaded image
+      // has the "correct" hash to pass verification.
+      console.log('Simulating hashing of image:', uploadedImageFile.name)
+      await new Promise(resolve => setTimeout(resolve, 500)) // Simulate hashing time
+      hashToVerify = '0x' + 'b'.repeat(64)
+      // --- END MOCK LOGIC ---
+      
+    } else if (hashInput) {
+      hashToVerify = hashInput
+    } else {
+      setError('Please enter a hash or upload an image.')
+      return
+    }
+
+    handleVerify(hashToVerify) // Call the verification logic
+  }
+
   return (
-    <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-xl">Loading...</div>
-      </div>
-    }>
-      <VerifyContent />
-    </Suspense>
-  );
+    <div className="flex flex-col items-center w-full min-h-[70vh] pb-20">
+      {/* --- The Verification Form --- */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="glass-card w-full max-w-2xl p-6 md:p-8 rounded-2xl"
+      >
+        <form onSubmit={handleSubmit}>
+          <h2 className="block text-3xl font-bold text-white mb-4 text-center">
+            Verify Proof-of-Art
+          </h2>
+          <p className="text-center text-slate-300 mb-6">
+            Enter a Proof Hash or upload an image to verify its authenticity.
+          </p>
+          
+          {/* Hash Input */}
+          <label htmlFor="hash" className="block text-xl font-semibold text-white mb-3">
+            Verify by Hash
+          </label>
+          <input
+            id="hash"
+            type="text"
+            value={hashInput}
+            onChange={(e) => {
+              setHashInput(e.target.value)
+              if (e.target.value) clearImage() // Clear image if user types hash
+            }}
+            placeholder="0x..."
+            className="w-full p-4 rounded-lg bg-black/20 text-white font-mono
+                       border border-white/20 focus:outline-none 
+                       focus:ring-2 focus:ring-blue-400"
+            disabled={isLoading || !!uploadedImageFile} // Disable if image is uploaded
+          />
+
+          <div className="text-center text-slate-400 my-4 text-lg">
+            — OR —
+          </div>
+
+          {/* Image Dropzone */}
+          <label htmlFor="image-upload" className="block text-xl font-semibold text-white mb-3">
+            Verify by Image
+          </label>
+          <div
+            onDrop={handleDrop}
+            onDragOver={handleDragOver}
+            className={`
+              w-full p-6 md:p-10 rounded-lg border-2 border-dashed
+              flex flex-col items-center justify-center cursor-pointer
+              transition-colors duration-200
+              ${
+                uploadedImageFile
+                  ? 'border-green-400 bg-green-900/10'
+                  : 'border-white/30 hover:border-blue-400 bg-black/20'
+              }
+            `}
+            onClick={() => document.getElementById('image-upload')?.click()}
+          >
+            {uploadedImagePreview ? (
+              <div className="relative w-full h-48 md:h-64 flex items-center justify-center">
+                <Image
+                  src={uploadedImagePreview}
+                  alt="Uploaded preview"
+                  fill
+                  style={{ objectFit: 'contain' }}
+                  className="rounded-lg max-h-full max-w-full"
+                />
+                <motion.button
+                  whileHover={{ scale: 1.1 }}
+                  whileTap={{ scale: 0.9 }}
+                  onClick={(e) => { e.stopPropagation(); clearImage() }}
+                  className="absolute top-2 right-2 p-2 bg-red-600/70 hover:bg-red-600 rounded-full text-white"
+                  title="Remove image"
+                >
+                  &times;
+                </motion.button>
+              </div>
+            ) : (
+              <>
+                <svg
+                  className="w-12 h-12 text-slate-400 mb-3"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="2"
+                    d="M7 16a4 4 0 01-.88-7.903A5 5 0 0115.9 6L16 6a3 3 0 013 3v10a2 2 0 01-2 2H7a2 2 0 01-2-2v-1a4 4 0 012-4z"
+                  ></path>
+                </svg>
+                <p className="text-lg text-slate-300">
+                  Drag & Drop image here, or{' '}
+                  <span className="text-blue-400 font-medium">click to upload</span>
+                </p>
+              </>
+            )}
+            <input
+              id="image-upload"
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleFileChange}
+              disabled={isLoading || !!hashInput} // Disable if hash is entered
+            />
+          </div>
+
+          <motion.button
+            type="submit"
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            disabled={isLoading || (!hashInput && !uploadedImageFile)}
+            className="mt-6 w-full rounded-xl px-8 py-4
+                       text-lg font-semibold text-white
+                       bg-white/10 hover:bg-white/20
+                       disabled:opacity-50 disabled:cursor-not-allowed
+                       transition-all duration-300"
+          >
+            {isLoading ? 'Verifying...' : 'Verify'}
+          </motion.button>
+        </form>
+      </motion.div>
+
+      {/* --- The Results --- */}
+      <AnimatePresence>
+        {isLoading && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+            <LoadingSpinner size="lg" />
+          </motion.div>
+        )}
+
+        {error && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="glass-card mt-8 w-full max-w-2xl p-6 rounded-2xl border-2 border-red-500/50"
+          >
+            <h3 className="text-2xl font-bold text-red-400 text-center">
+              Verification Failed
+            </h3>
+            <p className="text-center text-red-300 mt-2">{error}</p>
+          </motion.div>
+        )}
+
+        {result && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="glass-card mt-8 w-full max-w-2xl p-6 md:p-8 rounded-2xl border-2 border-green-500/50"
+          >
+            <h3 className="text-2xl font-bold text-green-400 text-center mb-6">
+              ✅ Proof Verified
+            </h3>
+            <div className="space-y-3">
+              <DetailItem
+                label="Creator"
+                value={result.creatorAddress}
+              />
+              <DetailItem
+                label="Timestamp"
+                value={format(new Date(result.timestamp), 'dd MMM yyyy, HH:mm:ss')}
+              />
+              <DetailItem label="Prompt" value={`"${result.prompt}"`} />
+              <DetailItem
+                label="Transaction"
+                value={result.txHash}
+              />
+              <DetailItem
+                label="IPFS Data"
+                value={result.ipfsUrl}
+              />
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  )
 }
 
+// Helper component for displaying details
+function DetailItem({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="text-left py-2 border-b border-white/10">
+      <p className="text-sm font-medium text-slate-400">{label}</p>
+      <p className="text-lg text-white font-mono break-all">{value}</p>
+    </div>
+  )
+}
